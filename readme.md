@@ -254,7 +254,3 @@ The purpose of this project is to provide a simple practical demonstration of **
 * Add performance comparison between algorithms
 * Add additional process management features
 * Improve user interface and responsiveness
-
-## Authors
-
-Developed as a **college PBL project** for demonstrating Operating System and Database Management System concepts.
