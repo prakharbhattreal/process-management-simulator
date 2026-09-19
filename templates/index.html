@@ -1,0 +1,398 @@
+{% set page_is_history = page_is_history|default(false) %}
+{% set process_rows = processes|default([], true) %}
+{% set run_segments = execution_segments|default([], true) %}
+{% set state_rows = process_states|default([], true) %}
+{% set metric_values = metrics|default({}, true) %}
+{% set saved_runs = history|default([], true) %}
+{% set form_errors = validation_errors|default(errors|default([], true), true) %}
+{% set selected_algorithm = algorithm|default('fcfs') %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#173740">
+  <title>{% if page_is_history %}Run history{% else %}Scheduler Lab{% endif %} · Process Management Simulator</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') if url_for is defined else '/static/css/style.css' }}">
+</head>
+<body class="{% if page_is_history %}history-page{% endif %}">
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="{{ url_for('index') if url_for is defined else '/' }}" data-testid="link-home">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+            <path d="M5 5h14v14H5z"/><path d="M8 9h8M8 12h5M8 15h3"/>
+          </svg>
+        </span>
+        <span class="brand-copy">
+          <strong>SCHEDULER LAB</strong>
+          <span>process management / 01</span>
+        </span>
+      </a>
+      <nav class="top-nav" aria-label="Primary navigation">
+        <a href="{{ url_for('index') if url_for is defined else '/' }}" class="{% if not page_is_history %}active{% endif %}" data-testid="link-new-run">New run</a>
+        <a href="{{ url_for('history') if url_for is defined else '/history' }}" class="{% if page_is_history %}active{% endif %}" data-testid="link-history">Run history</a>
+        <span class="status-chip"><span class="pulse"></span> simulator ready</span>
+      </nav>
+    </header>
+
+    <main class="page-wrap">
+      {% if page_is_history %}
+        <section class="history-toolbar">
+          <div>
+            <p class="eyebrow">Archive / completed runs</p>
+            <h1>Run history</h1>
+            <p>Review prior scheduling experiments and reopen their execution traces.</p>
+          </div>
+          <a class="button primary" href="{{ url_for('index') if url_for is defined else '/' }}" data-testid="button-start-run">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            Start a new run
+          </a>
+        </section>
+
+        <section class="panel" aria-labelledby="history-heading">
+          <div class="panel-header">
+            <div>
+              <div class="panel-kicker">Persistent trace log</div>
+              <h2 class="panel-title" id="history-heading">Saved simulations</h2>
+              <p class="panel-description">Each run keeps its inputs, selected policy, and measured output together.</p>
+            </div>
+            <span class="count-badge">{{ saved_runs|length }}</span>
+          </div>
+          <div class="history-table-wrap">
+            <table class="history-table">
+              <thead>
+                <tr><th>Run</th><th>Algorithm</th><th>Processes</th><th>Completion</th><th>Result</th><th></th></tr>
+              </thead>
+              <tbody>
+              {% for saved_run in saved_runs %}
+                <tr data-testid="row-history-{{ saved_run.id|default(loop.index) }}">
+                  <td><span class="run-id">#{{ saved_run.id|default('%03d'|format(loop.index)) }}</span></td>
+                  <td>{{ saved_run.algorithm|default('FCFS')|upper }}</td>
+                  <td>{{ saved_run.process_count|default(saved_run.processes|length if saved_run.processes is defined else '—') }}</td>
+                  <td>{{ saved_run.created_at|default(saved_run.timestamp|default('—')) }}</td>
+                  <td><span class="state-badge completed">complete</span></td>
+                  <td><a class="history-link" href="{{ url_for('history_detail', id=saved_run.id) if url_for is defined else '/history/' ~ saved_run.id }}" data-testid="link-history-{{ saved_run.id|default(loop.index) }}">Inspect trace</a></td>
+                </tr>
+              {% else %}
+                <tr><td colspan="6" class="table-empty">No saved simulations yet. Your completed runs will appear here.</td></tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        {% if history_detail is defined and history_detail %}
+          <section class="panel" style="margin-top:18px;" aria-labelledby="detail-heading">
+            <div class="panel-header">
+              <div>
+                <div class="panel-kicker">Trace detail / #{{ history_detail.id|default('—') }}</div>
+                <h2 class="panel-title" id="detail-heading">Reconstructed execution</h2>
+              </div>
+              <span class="state-badge completed">archived</span>
+            </div>
+            <div class="panel-body">
+              <div class="gantt-wrap">
+                <div class="gantt-chart">
+                  <div class="gantt-track">
+                    <span class="gantt-label">CPU / core 0</span>
+                    <div class="gantt-segments">
+                      {% for segment in history_detail.execution_segments|default([], true) %}
+                        <div class="segment" style="flex: {{ segment.width|default(1) }} 1 0;" title="{{ segment.process_id|default(segment.process|default('Process')) }} · {{ segment.start|default(0) }}–{{ segment.end|default(0) }}">
+                          <strong>{{ segment.process_id|default(segment.process|default('P1')) }}</strong>
+                          <span>{{ segment.start|default(0) }}—{{ segment.end|default(0) }}</span>
+                        </div>
+                      {% else %}
+                        <div class="gantt-empty" style="width:100%;">No execution segments stored for this run.</div>
+                      {% endfor %}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        {% endif %}
+      {% else %}
+        <section class="hero">
+          <div>
+            <p class="eyebrow">Kernel exercise / scheduling console</p>
+            <h1>See every decision<br>the scheduler makes.</h1>
+            <p class="hero-copy">Build a small process queue, choose a policy, and read the result like a lab instrument — one dispatch at a time.</p>
+          </div>
+          <div class="hero-note">
+            <strong>Designed for the viva.</strong>
+            <span>Inputs stay beside the trace so you can explain why a process moved from <code>READY</code> to <code>RUNNING</code>.</span>
+          </div>
+        </section>
+
+        {% if flashes is defined and flashes %}
+          <div class="flash-stack" role="status" aria-live="polite">
+            {% for flash in flashes %}
+              <div class="flash {{ flash.category|default('info') }}" data-testid="flash-message-{{ loop.index }}">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>
+                <span>{{ flash.message|default(flash) }}</span>
+              </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+
+        <div class="workspace">
+          <section class="panel input-panel" aria-labelledby="input-heading">
+            <div class="panel-header">
+              <div>
+                <div class="panel-kicker">01 / define workload</div>
+                <h2 class="panel-title" id="input-heading">Process queue</h2>
+                <p class="panel-description">Set the arrival, service, and priority signals.</p>
+              </div>
+              <span class="count-badge" id="process-count" data-testid="text-process-count">{{ process_rows|length }}</span>
+            </div>
+            <div class="panel-body">
+              {% if form_errors %}
+                <div class="validation-summary" role="alert" data-testid="status-validation">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.8 20h18.4L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg>
+                  <div>
+                    <strong>Check the queue before dispatch.</strong>
+                    <ul>
+                      {% for error in form_errors %}<li>{{ error }}</li>{% endfor %}
+                    </ul>
+                  </div>
+                </div>
+              {% endif %}
+
+              <form id="simulation-form" method="post" action="{{ url_for('simulate') if url_for is defined else '/simulate' }}" novalidate>
+                <div class="process-list" id="process-list" aria-live="polite">
+                  {% for process in process_rows %}
+                    <div class="process-row" data-process-row>
+                      <span class="process-number">P{{ loop.index }}</span>
+                      <div class="field-group">
+                        <label class="field-label" for="process-id-{{ loop.index }}">ID</label>
+                        <input class="field-control" id="process-id-{{ loop.index }}" name="process_id[]" value="{{ process.id|default(process.process_id|default('P' ~ loop.index)) }}" required data-process-field="id" data-testid="input-process-id-{{ loop.index }}">
+                      </div>
+                      <div class="field-group">
+                        <label class="field-label" for="arrival-time-{{ loop.index }}">Arrival</label>
+                        <input class="field-control" id="arrival-time-{{ loop.index }}" name="arrival_time[]" type="number" min="0" step="1" value="{{ process.arrival_time|default(process.arrival|default(0)) }}" required data-process-field="arrival" data-testid="input-arrival-time-{{ loop.index }}">
+                      </div>
+                      <div class="field-group">
+                        <label class="field-label" for="burst-time-{{ loop.index }}">Burst</label>
+                        <input class="field-control" id="burst-time-{{ loop.index }}" name="burst_time[]" type="number" min="1" step="1" value="{{ process.burst_time|default(process.burst|default(1)) }}" required data-process-field="burst" data-testid="input-burst-time-{{ loop.index }}">
+                      </div>
+                      <div class="field-group">
+                        <label class="field-label" for="priority-{{ loop.index }}">Priority</label>
+                        <input class="field-control" id="priority-{{ loop.index }}" name="priority[]" type="number" min="0" step="1" value="{{ process.priority|default(1) }}" required data-process-field="priority" data-testid="input-priority-{{ loop.index }}">
+                      </div>
+                      <button class="remove-process" type="button" aria-label="Remove process P{{ loop.index }}" data-remove-process data-testid="button-remove-process-{{ loop.index }}">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 12h14"/></svg>
+                      </button>
+                    </div>
+                  {% else %}
+                    <div class="empty-processes" id="empty-processes">
+                      <div>
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 6h16M4 12h11M4 18h7"/><circle cx="18" cy="16" r="3"/><path d="M18 14.5v3M16.5 16h3"/></svg>
+                        <strong>Queue is clear</strong>
+                        <span>Add at least one process to begin.</span>
+                      </div>
+                    </div>
+                  {% endfor %}
+                </div>
+
+                <button class="button secondary small" type="button" id="add-process" data-testid="button-add-process">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                  Add process
+                </button>
+
+                <div class="form-divider"></div>
+                <div class="field-group">
+                  <label class="field-label" for="algorithm">Scheduling policy <span class="field-hint">dispatch rule</span></label>
+                  <div class="select-wrap">
+                    <select class="field-control" id="algorithm" name="algorithm" data-testid="select-algorithm">
+                      <option value="fcfs" {% if selected_algorithm in ['fcfs', 'FCFS'] %}selected{% endif %}>First Come, First Served (FCFS)</option>
+                      <option value="sjf" {% if selected_algorithm in ['sjf', 'SJF'] %}selected{% endif %}>Shortest Job First (SJF)</option>
+                      <option value="priority" {% if selected_algorithm in ['priority', 'Priority'] %}selected{% endif %}>Priority scheduling</option>
+                      <option value="round_robin" {% if selected_algorithm in ['round_robin', 'rr', 'Round Robin'] %}selected{% endif %}>Round Robin</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="field-group {% if selected_algorithm not in ['round_robin', 'rr', 'Round Robin'] %}hidden{% endif %}" id="quantum-field">
+                  <label class="field-label" for="quantum">Time quantum <span class="field-hint">ticks per turn</span></label>
+                  <input class="field-control" id="quantum" name="quantum" type="number" min="1" step="1" value="{{ quantum|default(2) }}" data-testid="input-quantum">
+                </div>
+                <div class="algorithm-note" id="algorithm-note">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 10v6M12 7h.01"/></svg>
+                  <span id="algorithm-note-text">FCFS is non-preemptive: the oldest ready process gets the CPU first.</span>
+                </div>
+                <div class="action-row" style="margin-top:22px;">
+                  <button class="button secondary" type="reset" data-testid="button-reset">Reset queue</button>
+                  <button class="button primary" type="submit" data-testid="button-run-simulation">
+                    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m8 5 11 7-11 7V5Z"/></svg>
+                    Run simulation
+                  </button>
+                </div>
+                <p class="field-hint" id="form-status" role="status" aria-live="polite" style="display:block;margin:11px 0 0;text-align:right;"></p>
+              </form>
+            </div>
+          </section>
+
+          <section class="result-column" aria-labelledby="results-heading">
+            <div class="result-head">
+              <h2 class="result-title" id="results-heading">Execution readout</h2>
+              <span class="result-meta">{% if run_segments or state_rows or metric_values %}last dispatch / loaded{% else %}awaiting dispatch{% endif %}</span>
+            </div>
+            <div class="result-stack">
+              <section class="panel result-card" aria-labelledby="gantt-heading">
+                <div class="panel-header">
+                  <div>
+                    <div class="panel-kicker">02 / timeline</div>
+                    <h3 class="panel-title" id="gantt-heading">Gantt execution</h3>
+                  </div>
+                  {% if run_segments %}
+                    <div class="legend" aria-label="Gantt legend">
+                      <span class="legend-item"><i class="legend-dot"></i> running</span>
+                      <span class="legend-item"><i class="legend-dot amber"></i> dispatch</span>
+                    </div>
+                  {% endif %}
+                </div>
+                <div class="panel-body">
+                  {% if run_segments %}
+                    <div class="gantt-wrap" data-testid="chart-gantt">
+                      <div class="gantt-scale"><span>time / ticks</span><span>{{ timeline_end|default('—') }} total</span></div>
+                      <div class="gantt-chart">
+                        <div class="gantt-track">
+                          <span class="gantt-label">CPU / core 0</span>
+                          <div class="gantt-segments">
+                            {% for segment in run_segments %}
+                              <div class="segment" style="flex: {{ segment.width|default(segment.duration|default(1)) }} 1 0;" title="{{ segment.process_id|default(segment.process|default('Process')) }} · {{ segment.start|default(0) }}–{{ segment.end|default(0) }}" data-testid="segment-{{ loop.index }}">
+                                <strong>{{ segment.process_id|default(segment.process|default('P' ~ loop.index)) }}</strong>
+                                <span>{{ segment.start|default(0) }}—{{ segment.end|default(0) }}</span>
+                              </div>
+                            {% endfor %}
+                          </div>
+                        </div>
+                        <div class="time-axis">
+                          {% for tick in timeline_ticks|default([], true) %}<span>{{ tick }}</span>{% else %}<span>0</span><span>time</span><span>{{ timeline_end|default('—') }}</span>{% endfor %}
+                        </div>
+                      </div>
+                    </div>
+                  {% else %}
+                    <div class="ready-state" data-testid="empty-execution">
+                      <div>
+                        <div class="ready-orbit" aria-hidden="true">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M7 7h10v10H7z"/><path d="M4 4h3M17 4h3M4 20h3M17 20h3"/></svg>
+                        </div>
+                        <h3>Trace is standing by</h3>
+                        <p>Configure the queue on the left, then dispatch it to reveal the CPU timeline and state transitions.</p>
+                      </div>
+                    </div>
+                  {% endif %}
+                </div>
+              </section>
+
+              <section class="panel result-card" aria-labelledby="metrics-heading">
+                <div class="panel-header">
+                  <div>
+                    <div class="panel-kicker">03 / measurements</div>
+                    <h3 class="panel-title" id="metrics-heading">Performance metrics</h3>
+                  </div>
+                  <span class="result-meta">lower wait is better</span>
+                </div>
+                <div class="panel-body">
+                  <div class="metric-grid" data-testid="metrics-grid">
+                    <div class="metric"><span class="metric-label">Avg. waiting</span><div class="metric-value">{{ metric_values.average_waiting_time|default(metric_values.avg_waiting|default('—')) }}</div><span class="metric-unit">time units</span></div>
+                    <div class="metric"><span class="metric-label">Avg. turnaround</span><div class="metric-value">{{ metric_values.average_turnaround_time|default(metric_values.avg_turnaround|default('—')) }}</div><span class="metric-unit">time units</span></div>
+                    <div class="metric"><span class="metric-label">Avg. response</span><div class="metric-value">{{ metric_values.average_response_time|default(metric_values.avg_response|default('—')) }}</div><span class="metric-unit">time units</span></div>
+                    <div class="metric"><span class="metric-label">CPU utilization</span><div class="metric-value">{{ metric_values.cpu_utilization|default('—') }}</div><span class="metric-unit">percent</span></div>
+                    <div class="metric"><span class="metric-label">Throughput</span><div class="metric-value">{{ metric_values.throughput|default('—') }}</div><span class="metric-unit">jobs / unit</span></div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="panel result-card" aria-labelledby="states-heading">
+                <div class="panel-header">
+                  <div>
+                    <div class="panel-kicker">04 / live ledger</div>
+                    <h3 class="panel-title" id="states-heading">Process states</h3>
+                  </div>
+                  <span class="result-meta">final snapshot</span>
+                </div>
+                <div class="panel-body">
+                  <table class="state-table" data-testid="table-process-states">
+                    <thead><tr><th>Process</th><th>Status</th><th>Arrival</th><th>Burst</th><th>Completion</th></tr></thead>
+                    <tbody>
+                    {% for state in state_rows %}
+                      <tr data-testid="row-process-state-{{ state.id|default(state.process_id|default(loop.index)) }}">
+                        <td class="pid">{{ state.id|default(state.process_id|default('P' ~ loop.index)) }}</td>
+                        <td><span class="state-badge {{ state.status_class|default(state.status|default('ready')|lower) }}">{{ state.status|default('READY') }}</span></td>
+                        <td>{{ state.arrival_time|default(state.arrival|default('—')) }}</td>
+                        <td>{{ state.burst_time|default(state.burst|default('—')) }}</td>
+                        <td>{{ state.completion_time|default(state.completion|default('—')) }}</td>
+                      </tr>
+                    {% else %}
+                      <tr><td colspan="5" class="table-empty">Run a simulation to populate the process ledger.</td></tr>
+                    {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            </div>
+          </section>
+        </div>
+
+        <div class="below-grid">
+          <section class="panel" aria-labelledby="guide-heading">
+            <div class="panel-header">
+              <div>
+                <div class="panel-kicker">Field notes</div>
+                <h2 class="panel-title" id="guide-heading">Policy quick reference</h2>
+              </div>
+            </div>
+            <div class="panel-body">
+              <div class="guide-list">
+                <div class="guide-item"><span class="guide-code">FCFS</span><div><strong>First come, first served</strong><p>Non-preemptive. Arrival order decides the next dispatch.</p></div><span class="guide-arrow">→</span></div>
+                <div class="guide-item"><span class="guide-code">SJF</span><div><strong>Shortest job first</strong><p>Non-preemptive. The smallest burst in the ready queue runs first.</p></div><span class="guide-arrow">→</span></div>
+                <div class="guide-item"><span class="guide-code">PRI</span><div><strong>Priority scheduling</strong><p>Lower priority values receive the CPU first in the default convention.</p></div><span class="guide-arrow">→</span></div>
+                <div class="guide-item"><span class="guide-code">RR</span><div><strong>Round Robin</strong><p>Preemptive rotation. Set a quantum to balance fairness and overhead.</p></div><span class="guide-arrow">→</span></div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel history-card" aria-labelledby="recent-heading">
+            <div class="panel-header">
+              <div>
+                <div class="panel-kicker">Archive</div>
+                <h2 class="panel-title" id="recent-heading">Recent runs</h2>
+              </div>
+              <a class="history-link" href="{{ url_for('history') if url_for is defined else '/history' }}" data-testid="link-view-all-history">View all</a>
+            </div>
+            <div class="panel-body">
+              {% if saved_runs %}
+                <div class="history-list">
+                  {% for saved_run in saved_runs[:4] %}
+                    <a class="history-item" href="{{ url_for('history_detail', id=saved_run.id) if url_for is defined else '/history/' ~ saved_run.id }}" data-testid="card-history-{{ saved_run.id|default(loop.index) }}">
+                      <div><strong>{{ saved_run.algorithm|default('FCFS')|upper }} run</strong><span>{{ saved_run.process_count|default(saved_run.processes|length if saved_run.processes is defined else '—') }} processes</span></div>
+                      <time>{{ saved_run.created_at|default(saved_run.timestamp|default('recent')) }}</time>
+                    </a>
+                  {% endfor %}
+                </div>
+              {% else %}
+                <div class="empty-history">
+                  <div>
+                    <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 5h16v15H4z"/><path d="M8 9h8M8 13h5"/><path d="M7 3v4M17 3v4"/></svg>
+                    <strong>Your archive is empty</strong>
+                    <span>Complete a run to save its trace here.</span>
+                  </div>
+                </div>
+              {% endif %}
+            </div>
+          </section>
+        </div>
+      {% endif %}
+    </main>
+
+    <footer class="footer">
+      <span>scheduler lab / process management simulator</span>
+      <span>ready · deterministic · explainable</span>
+    </footer>
+  </div>
+  <script src="{{ url_for('static', filename='js/app.js') if url_for is defined else '/static/js/app.js' }}" defer></script>
+</body>
+</html>
